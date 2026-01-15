@@ -22,7 +22,7 @@ const UserSchema = new mongoose.Schema({
 const User = mongoose.model("User", UserSchema);
 
 /* ===== AI ===== */
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const genAI = new GoogleGenerativeAI(process.env.AIzaSyBBAkDEDksRSss9382kXWvry2C94z6yoC0);
 
 /* ===== NAME DETECTOR ===== */
 function extractName(text) {
