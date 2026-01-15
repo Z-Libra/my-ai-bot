@@ -1,63 +1,65 @@
-import express from "express";
 import fetch from "node-fetch";
 import dotenv from "dotenv";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 dotenv.config();
 
-const app = express();
-app.use(express.json());
-
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
-/* ===== Telegram Send ===== */
+let offset = 0;
+
 async function sendMessage(chatId, text) {
-  const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
-  await fetch(url, {
+  await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text
-    })
+    body: JSON.stringify({ chat_id: chatId, text })
   });
 }
 
-/* ===== Webhook ===== */
-app.post("/webhook", async (req, res) => {
-  const message = req.body.message;
-  if (!message) return res.sendStatus(200);
+async function getUpdates() {
+  const res = await fetch(
+    `https://api.telegram.org/bot${TELEGRAM_TOKEN}/getUpdates?timeout=30&offset=${offset}`
+  );
+  const data = await res.json();
+  return data.result || [];
+}
 
-  const chatId = message.chat.id;
-  const userText = message.text || "";
+async function runBot() {
+  console.log("🤖 Gemini Telegram Bot started");
 
-  try {
-    const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
-      systemInstruction: `
+  while (true) {
+    try {
+      const updates = await getUpdates();
+
+      for (const update of updates) {
+        offset = update.update_id + 1;
+
+        const msg = update.message;
+        if (!msg || !msg.text) continue;
+
+        const chatId = msg.chat.id;
+        const text = msg.text;
+
+        const model = genAI.getGenerativeModel({
+          model: "gemini-1.5-flash",
+          systemInstruction: `
 မင်းက Z-Libra AI ဖြစ်တယ်။
 User ကို နူးညံ့ပြီး မိတ်ဆွေလို ပြောပါ။
 `
-    });
+        });
 
-    const result = await model.generateContent(userText);
-    const reply = result.response.text();
+        const result = await model.generateContent(text);
+        const reply = result.response.text();
 
-    await sendMessage(chatId, reply);
-  } catch (err) {
-    await sendMessage(chatId, "အခုစဉ်းစားနေတုန်းပါရှင် 🤍");
+        await sendMessage(chatId, reply);
+      }
+    } catch (e) {
+      console.log("Error:", e.message);
+    }
   }
+}
 
-  res.sendStatus(200);
-});
-
-app.get("/", (req, res) => {
-  res.send("Telegram Gemini Bot Running");
-});
-
-app.listen(3000, () => {
-  console.log("Bot server running");
-});
+runBot();
