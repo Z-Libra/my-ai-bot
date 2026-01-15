@@ -1,82 +1,63 @@
 import express from "express";
-import cors from "cors";
-import mongoose from "mongoose";
+import fetch from "node-fetch";
 import dotenv from "dotenv";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 dotenv.config();
 
 const app = express();
-app.use(cors());
 app.use(express.json());
 
-/* ===== DATABASE ===== */
-mongoose.connect(process.env.MONGO_URI);
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-const UserSchema = new mongoose.Schema({
-  name: String,
-  memory: Array,
-  createdAt: { type: Date, default: Date.now }
-});
+const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
-const User = mongoose.model("User", UserSchema);
-
-/* ===== AI ===== */
-const genAI = new GoogleGenerativeAI(process.env.AIzaSyBBAkDEDksRSss9382kXWvry2C94z6yoC0);
-
-/* ===== NAME DETECTOR ===== */
-function extractName(text) {
-  const match = text.match(/နာမည်\s*(.+)/);
-  return match ? match[1].trim() : null;
+/* ===== Telegram Send ===== */
+async function sendMessage(chatId, text) {
+  const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
+  await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text
+    })
+  });
 }
 
-/* ===== CHAT API ===== */
-app.post("/chat", async (req, res) => {
+/* ===== Webhook ===== */
+app.post("/webhook", async (req, res) => {
+  const message = req.body.message;
+  if (!message) return res.sendStatus(200);
+
+  const chatId = message.chat.id;
+  const userText = message.text || "";
+
   try {
-    const { message } = req.body;
-
-    let name = extractName(message);
-    let user = null;
-
-    if (name) {
-      user = await User.findOne({ name });
-      if (!user) {
-        user = await User.create({ name, memory: [] });
-      }
-    }
-
-    const systemPrompt = `
-မင်းက Z-Libra AI ဖြစ်တယ်။
-User ရဲ့နာမည်က ${user?.name || "မသိ"} ဖြစ်တယ်။
-နာမည်ကို အမြဲမှတ်ထားပြီး နူးညံ့စွာ ခေါ်ပြောပါ။
-    `;
-
     const model = genAI.getGenerativeModel({
       model: "gemini-1.5-flash",
-      systemInstruction: systemPrompt
+      systemInstruction: `
+မင်းက Z-Libra AI ဖြစ်တယ်။
+User ကို နူးညံ့ပြီး မိတ်ဆွေလို ပြောပါ။
+`
     });
 
-    const chat = model.startChat({
-      history: user?.memory || []
-    });
-
-    const result = await chat.sendMessage(message);
+    const result = await model.generateContent(userText);
     const reply = result.response.text();
 
-    if (user) {
-      user.memory.push({ role: "user", parts: [{ text: message }] });
-      user.memory.push({ role: "model", parts: [{ text: reply }] });
-      await user.save();
-    }
-
-    res.json({ reply });
-
+    await sendMessage(chatId, reply);
   } catch (err) {
-    res.status(500).json({ error: "AI Error" });
+    await sendMessage(chatId, "အခုစဉ်းစားနေတုန်းပါရှင် 🤍");
   }
+
+  res.sendStatus(200);
 });
 
-/* ===== START ===== */
+app.get("/", (req, res) => {
+  res.send("Telegram Gemini Bot Running");
+});
+
 app.listen(3000, () => {
-  console.log("Z-Libra AI backend running");
+  console.log("Bot server running");
 });
