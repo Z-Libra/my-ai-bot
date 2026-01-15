@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Z-Libra AI Partner</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #0f172a; color: white; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        .header { padding: 15px; text-align: center; background: #1e293b; font-weight: bold; border-bottom: 1px solid #334155; }
+        #chat-container { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; scroll-behavior: smooth; }
+        .message { padding: 12px 16px; border-radius: 15px; max-width: 85%; line-height: 1.5; word-wrap: break-word; }
+        .user { align-self: flex-end; background: #3b82f6; border-bottom-right-radius: 2px; }
+        .ai { align-self: flex-start; background: #334155; border-bottom-left-radius: 2px; }
+        .input-area { padding: 15px; background: #1e293b; display: flex; gap: 10px; }
+        input { flex: 1; padding: 12px; border-radius: 25px; border: 1px solid #475569; background: #0f172a; color: white; outline: none; }
+        button { width: 45px; height: 45px; border-radius: 50%; border: none; background: #3b82f6; color: white; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="header">🤖 Z-Libra's Forever Memory AI</div>
+    <div id="chat-container"></div>
+    <div class="input-area">
+        <input type="text" id="userInput" placeholder="တစ်ခုခု ပြောလိုက်လေ..." onkeypress="if(event.key==='Enter') send()">
+        <button onclick="send()">🚀</button>
+    </div>
+
+    <script type="module">
+        import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
+        const API_KEY = "AIzaSyBBAkDEDksRSss9382kXWvry2C94z6yoC0";
+        const genAI = new GoogleGenerativeAI(API_KEY);
+        const model = genAI.getGenerativeModel({ 
+            model: "gemini-1.5-flash",
+            systemInstruction: "မင်းရဲ့နာမည်က Z-Libra ရဲ့ AI ဖြစ်တယ်။ မင်းရဲ့သခင်က မျိုးသူရိန်လင်း ဖြစ်တယ်။ သူ့ကို ခင်ခင်မင်မင် 'ငါ့ကောင်' ဒါမှမဟုတ် 'ဟျောင့်' လို့ ခေါ်နိုင်တယ်။"
+        });
+
+        const container = document.getElementById('chat-container');
+        
+        // ၁။ Browser ထဲက မှတ်ဉာဏ်ဟောင်းကို ပြန်ယူမယ်
+        let chatHistory = JSON.parse(localStorage.getItem('ai_memory')) || [];
+
+        // စာမျက်နှာပွင့်လာတာနဲ့ အရင်ပြောဖူးတာတွေကို ပြမယ်
+        chatHistory.forEach(msg => {
+            displayMessage(msg.role === 'user' ? 'user' : 'ai', msg.parts[0].text);
+        });
+
+        function displayMessage(role, text) {
+            const div = document.createElement('div');
+            div.className = `message ${role}`;
+            div.innerText = text;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        window.send = async () => {
+            const input = document.getElementById('userInput');
+            const userText = input.value.trim();
+            if (!userText) return;
+
+            displayMessage('user', userText);
+            input.value = '';
+
+            // ၂။ မှတ်ဉာဏ်ထဲကို စကားလုံးအသစ် ထည့်မယ်
+            chatHistory.push({ role: "user", parts: [{ text: userText }] });
+
+            try {
+                const chat = model.start_chat({ history: chatHistory });
+                const result = await chat.sendMessage(userText);
+                const aiResponse = result.response.text();
+
+                displayMessage('ai', aiResponse);
+
+                // AI ရဲ့ အဖြေကိုလည်း မှတ်ဉာဏ်ထဲ ထည့်မယ်
+                chatHistory.push({ role: "model", parts: [{ text: aiResponse }] });
+                
+                // ၃။ Browser ရဲ့ Local Storage ထဲမှာ အပြီးသိမ်းလိုက်မယ်
+                localStorage.setItem('ai_memory', JSON.stringify(chatHistory));
+
+            } catch (error) {
+                displayMessage('ai', "Error တက်သွားတယ် ငါ့ကောင်။");
+            }
+        };
+    </script>
+</body>
+</html>
